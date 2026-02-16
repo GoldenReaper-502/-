@@ -1,47 +1,55 @@
-from fastapi import Depends, FastAPI
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from backend.core.errors import register_exception_handlers
-from backend.core.logging_config import setup_logging, logger
-from backend.services.store import store, InMemoryStore
-from backend.modules.core.router import router as core_router
-from backend.modules.risk.router import router as risk_router
-from backend.modules.behavior.router import router as behavior_router
-from backend.modules.work_permits.router import router as permits_router
-from backend.modules.checklists.router import router as checklists_router
-from backend.modules.dashboard.router import router as dashboard_router
+from backend.core.config import settings
+from backend.core.errors import AppError, app_error_handler, generic_error_handler
+from backend.core.logging import setup_logging
+from backend.storage.db import init_db
 
-
-def get_store() -> InMemoryStore:
-    return store
-
+from backend.routers.platform import router as platform_router
+from backend.routers.predictive import router as predictive_router
+from backend.routers.behavior import router as behavior_router
+from backend.routers.permits import router as permits_router
+from backend.routers.checklists import router as checklists_router
+from backend.routers.dashboard import router as dashboard_router
+from backend.routers.core_compat import router as core_compat_router
 
 setup_logging()
-app = FastAPI(title="HAZM TUWAIQ API", version="1.1.0", docs_url="/api/docs", openapi_url="/api/openapi.json")
+
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.version,
+    docs_url=f"{settings.api_prefix}/docs",
+    openapi_url=f"{settings.api_prefix}/openapi.json",
+    redoc_url=f"{settings.api_prefix}/redoc",
+)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://127.0.0.1:4173", "http://localhost:4173"],
+    allow_origins=settings.cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-register_exception_handlers(app)
-
-api = FastAPI()
-
-app.include_router(core_router, prefix="/api")
-app.include_router(risk_router, prefix="/api")
-app.include_router(behavior_router, prefix="/api")
-app.include_router(permits_router, prefix="/api")
-app.include_router(checklists_router, prefix="/api")
-app.include_router(dashboard_router, prefix="/api")
+app.add_exception_handler(AppError, app_error_handler)
+app.add_exception_handler(Exception, generic_error_handler)
 
 
-@app.get("/api/health")
-def health(_: InMemoryStore = Depends(get_store)):
-    return {"ok": True, "message": "Service healthy"}
+@app.on_event("startup")
+def on_startup():
+    init_db()
 
 
-logger.info("HAZM TUWAIQ API initialized")
+@app.get("/health")
+def health():
+    return {"ok": True}
+
+
+app.include_router(platform_router, prefix=settings.api_prefix)
+app.include_router(core_compat_router, prefix=settings.api_prefix)
+app.include_router(predictive_router, prefix=settings.api_prefix)
+app.include_router(behavior_router, prefix=settings.api_prefix)
+app.include_router(permits_router, prefix=settings.api_prefix)
+app.include_router(checklists_router, prefix=settings.api_prefix)
+app.include_router(dashboard_router, prefix=settings.api_prefix)

@@ -3,79 +3,85 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>حزم طويق - منصة السلامة الذكية</title>
+    <title>حزم طويق – HAZM TUWAIQ</title>
     <link rel="stylesheet" href="style.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   </head>
   <body>
-    <header class="topbar">
-      <h1>حزم طويق – HAZM TUWAIQ</h1>
-      <p>منصة السلامة المهنية المدعومة بالذكاء الاصطناعي</p>
-    </header>
+    <div class="layout">
+      <aside class="sidebar">
+        <h2>حزم طويق</h2>
+        <a class="nav-item active" href="#" data-page="dashboard">لوحة التحكم</a>
+        <a class="nav-item" href="#" data-page="riskAnalysis">تحليل المخاطر</a>
+        <a class="nav-item" href="#" data-page="workPermits">تصاريح العمل</a>
+        <a class="nav-item" href="#" data-page="behavior">التحليل السلوكي</a>
+      </aside>
 
-    <nav class="tabs">
-      <button class="tab active" data-tab="dashboard">Dashboard</button>
-      <button class="tab" data-tab="risk">تحليل المخاطر</button>
-      <button class="tab" data-tab="permits">تصاريح العمل</button>
-      <button class="tab" data-tab="behavior">التحليل السلوكي</button>
-    </nav>
+      <main class="content">
+        <header class="topbar">
+          <h1>HAZM TUWAIQ — AI Safety Platform</h1>
+          <p>منصة السلامة المهنية المدعومة بالذكاء الاصطناعي</p>
+        </header>
 
-    <main>
-      <section id="dashboard" class="panel active">
-        <div class="cards">
-          <article class="card"><h3>Risk Score</h3><p id="kpi-risk">--</p></article>
-          <article class="card"><h3>Active Permits</h3><p id="kpi-permits">--</p></article>
-          <article class="card"><h3>Smart Alerts</h3><p id="kpi-alerts">--</p></article>
-          <article class="card"><h3>System</h3><p id="kpi-system">Checking...</p></article>
+        <div class="page active" id="dashboardPage">
+          <div class="stats-grid">
+            <div class="stat-card"><h4>Global Risk Score</h4><div id="globalRiskScore">0</div></div>
+            <div class="stat-card"><h4>Active Permits</h4><div id="activePermitsCount">0</div></div>
+            <div class="stat-card"><h4>Checklists</h4><div id="checklistsCount">0</div></div>
+            <div class="stat-card"><h4>System</h4><div id="systemHealth">--</div></div>
+          </div>
+          <div class="card"><canvas id="dashboardChart" height="120"></canvas></div>
         </div>
-        <article class="card">
-          <h3>Risk Trend</h3>
-          <canvas id="risk-chart" height="100"></canvas>
-        </article>
-      </section>
 
-      <section id="risk" class="panel">
-        <article class="card">
-          <h3>Predictive Risk Engine</h3>
-          <form id="risk-form">
-            <input name="location" placeholder="Location" required />
-            <input name="historical_incidents" type="number" min="0" placeholder="Historical incidents" required />
-            <input name="environmental_factors" placeholder="Environmental factors (comma separated)" />
-            <button type="submit">تحليل</button>
-          </form>
-          <pre id="risk-result"></pre>
-        </article>
-      </section>
+        <div class="page" id="riskAnalysisPage">
+          <h3>تحليل المخاطر</h3>
+          <div class="card">
+            <div class="card-body">
+              <label>الموقع</label>
+              <input id="riskLocation" class="input" placeholder="مثال: Site A" />
+              <label>عدد الحوادث السابقة</label>
+              <input id="riskHistorical" class="input" type="number" value="0" />
+              <label>عوامل بيئية (كل سطر عامل)</label>
+              <textarea id="riskFactors" class="input" rows="5" placeholder="Heat&#10;Dust&#10;Night Shift"></textarea>
+              <button class="btn" onclick="runRiskPrediction()">تشغيل التحليل</button>
+              <div id="riskResult" class="result"></div>
+            </div>
+          </div>
+        </div>
 
-      <section id="permits" class="panel">
-        <article class="card">
-          <h3>تصاريح العمل الرقمية</h3>
-          <form id="permit-form">
-            <input name="title" placeholder="Title" required />
-            <input name="risk_level" placeholder="Risk Level" required />
-            <input name="approved_by" placeholder="Approved By" required />
-            <input name="status" placeholder="Status" required />
-            <input name="checklist_items" placeholder="Checklist items (comma separated)" />
-            <button type="submit">إضافة تصريح</button>
-          </form>
-          <div id="permits-list"></div>
-        </article>
-      </section>
+        <div class="page" id="workPermitsPage">
+          <h3>تصاريح العمل</h3>
+          <div class="card">
+            <div class="card-body">
+              <h4>إنشاء تصريح</h4>
+              <input id="permitTitle" class="input" placeholder="عنوان التصريح" />
+              <select id="permitRisk" class="input">
+                <option>Low</option>
+                <option selected>Medium</option>
+                <option>High</option>
+              </select>
+              <input id="permitApprover" class="input" placeholder="Approved By (اختياري)" />
+              <textarea id="permitChecklist" class="input" rows="4" placeholder="Checklist items (كل سطر)"></textarea>
+              <button class="btn" onclick="createPermit()">حفظ</button>
+            </div>
+          </div>
+          <div id="permitsList"></div>
+        </div>
 
-      <section id="behavior" class="panel">
-        <article class="card">
-          <h3>تحليل سلوك العمال</h3>
-          <form id="behavior-form">
-            <input name="location" placeholder="Location" required />
-            <textarea name="events" rows="4" placeholder='JSON events e.g. [{"worker_id":"W1","event_type":"no_helmet","duration_seconds":15,"confidence":0.9}]'></textarea>
-            <button type="submit">تحليل السلوك</button>
-          </form>
-          <pre id="behavior-result"></pre>
-        </article>
-      </section>
-    </main>
-
-    <div id="toast" class="toast"></div>
+        <div class="page" id="behaviorPage">
+          <h3>التحليل السلوكي</h3>
+          <div class="card">
+            <div class="card-body">
+              <input id="behaviorLocation" class="input" placeholder="Location" />
+              <label>Events (كل سطر: TYPE|SEVERITY)</label>
+              <textarea id="behaviorEvents" class="input" rows="6" placeholder="PPE_MISSING|4&#10;FALL_RISK|5"></textarea>
+              <button class="btn" onclick="runBehaviorAnalysis()">تحليل</button>
+              <div id="behaviorResult" class="result"></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
 
     <script src="frontend/app.js"></script>
   </body>

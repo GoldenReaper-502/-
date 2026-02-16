@@ -1,235 +1,316 @@
-(() => {
-  const API_BASE_URL =
-    (window.location.port === '4173' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost'))
-      ? 'http://127.0.0.1:8000/api'
-      : '/api';
+const CONFIG = {
+  API_BASE_URL: "http://127.0.0.1:8000/api",
+};
 
-  const state = {
-    chart: null,
-    openapi: null,
-  };
+const state = {
+  chart: null,
+  currentPage: "dashboard",
+};
 
-  const el = {
-    tabs: document.querySelectorAll('.tab'),
-    panels: document.querySelectorAll('.panel'),
-    kpiRisk: document.getElementById('kpi-risk'),
-    kpiPermits: document.getElementById('kpi-permits'),
-    kpiAlerts: document.getElementById('kpi-alerts'),
-    kpiSystem: document.getElementById('kpi-system'),
-    riskForm: document.getElementById('risk-form'),
-    riskResult: document.getElementById('risk-result'),
-    behaviorForm: document.getElementById('behavior-form'),
-    behaviorResult: document.getElementById('behavior-result'),
-    permitForm: document.getElementById('permit-form'),
-    permitsList: document.getElementById('permits-list'),
-    toast: document.getElementById('toast'),
-  };
+function getApiBaseUrl() {
+  const onLocal4173 =
+    window.location.port === "4173" &&
+    (window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost");
+  return onLocal4173 ? "http://127.0.0.1:8000/api" : "/api";
+}
 
-  function notify(message, isError = false) {
-    el.toast.textContent = message;
-    el.toast.style.background = isError ? '#6b2332' : '#1e2e57';
-    el.toast.classList.add('show');
-    setTimeout(() => el.toast.classList.remove('show'), 2400);
+CONFIG.API_BASE_URL = getApiBaseUrl();
+
+async function apiFetch(path, options = {}) {
+  const response = await fetch(`${CONFIG.API_BASE_URL}${path}`, {
+    method: options.method || "GET",
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    body: options.body,
+  });
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    data = {};
   }
 
-  async function request(path, options = {}) {
-    const res = await fetch(`${API_BASE_URL}${path}`, {
-      method: options.method || 'GET',
-      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-      body: options.body ? JSON.stringify(options.body) : undefined,
+  if (!response.ok) {
+    throw new Error(data.message || data.detail || `HTTP ${response.status}`);
+  }
+
+  return data;
+}
+
+function showPage(pageName) {
+  document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
+  document.querySelectorAll(".nav-item").forEach((n) => n.classList.remove("active"));
+
+  const page = document.getElementById(`${pageName}Page`);
+  if (page) page.classList.add("active");
+
+  const nav = document.querySelector(`[data-page="${pageName}"]`);
+  if (nav) nav.classList.add("active");
+
+  state.currentPage = pageName;
+  loadPageData(pageName);
+}
+
+async function loadDashboardAdvanced() {
+  try {
+    const [permits, checklists, dashboard] = await Promise.all([
+      apiFetch("/core/work-permits").catch(() => []),
+      apiFetch("/core/checklists").catch(() => []),
+      apiFetch("/dashboard").catch(() => ({})),
+    ]);
+
+    const activePermits = permits.filter((p) => (p.status || "").toLowerCase() === "active").length;
+    const riskScore = dashboard.risk_score ??
+      (permits.length
+        ? Math.round(
+            permits.reduce(
+              (acc, p) => acc + (p.risk_level === "High" ? 80 : p.risk_level === "Medium" ? 50 : 20),
+              0
+            ) / permits.length
+          )
+        : 0);
+
+    const smartAlerts = dashboard.smart_alerts ?? permits.filter((p) => p.risk_level !== "Low").length;
+
+    const globalRiskScore = document.getElementById("globalRiskScore");
+    const activePermitsCount = document.getElementById("activePermitsCount");
+    const checklistsCount = document.getElementById("checklistsCount");
+    const systemHealth = document.getElementById("systemHealth");
+
+    if (globalRiskScore) globalRiskScore.textContent = String(riskScore);
+    if (activePermitsCount) activePermitsCount.textContent = String(activePermits);
+    if (checklistsCount) checklistsCount.textContent = String(checklists.length);
+    if (systemHealth) systemHealth.textContent = smartAlerts >= 1 ? "Online" : "Monitoring";
+
+    const ctx = document.getElementById("dashboardChart");
+    if (ctx && window.Chart) {
+      if (state.chart) state.chart.destroy();
+
+      const buckets = { Low: 0, Medium: 0, High: 0 };
+      permits.forEach((p) => {
+        const level = p.risk_level in buckets ? p.risk_level : "Medium";
+        buckets[level] += 1;
+      });
+
+      state.chart = new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: ["Low", "Medium", "High"],
+          datasets: [
+            {
+              label: "Work Permits by Risk",
+              data: [buckets.Low, buckets.Medium, buckets.High],
+            },
+          ],
+        },
+        options: { responsive: true },
+      });
+    }
+  } catch (e) {
+    console.error("loadDashboardAdvanced error", e);
+  }
+}
+
+async function runRiskPrediction() {
+  const location = document.getElementById("riskLocation")?.value.trim() || "";
+  const historical = parseInt(document.getElementById("riskHistorical")?.value || "0", 10);
+  const factorsText = document.getElementById("riskFactors")?.value.trim() || "";
+
+  const environmental_factors = factorsText
+    ? factorsText.split("\n").map((x) => x.trim()).filter(Boolean)
+    : [];
+
+  const out = document.getElementById("riskResult");
+  if (out) out.innerHTML = "جاري التحليل...";
+
+  try {
+    const data = await apiFetch("/core/predict-risk", {
+      method: "POST",
+      body: JSON.stringify({
+        location,
+        historical_incidents: historical,
+        environmental_factors,
+      }),
     });
 
-    let json = {};
-    try {
-      json = await res.json();
-    } catch (_) {}
-
-    if (!res.ok) {
-      throw new Error(json.detail || `HTTP ${res.status}`);
+    if (out) {
+      out.innerHTML = `
+        <div class="success">
+          <h4>Risk Score: ${data.risk_score} (${data.risk_level})</h4>
+          <ul>${(data.recommendations || []).map((r) => `<li>${r}</li>`).join("")}</ul>
+        </div>
+      `;
     }
-    return json;
+  } catch (e) {
+    if (out) out.innerHTML = `<div class="error">خطأ: ${e.message}</div>`;
   }
+}
 
-  async function loadOpenApi() {
-    if (state.openapi) return state.openapi;
-    try {
-      state.openapi = await request('/openapi.json');
-      return state.openapi;
-    } catch {
-      state.openapi = { paths: {} };
-      return state.openapi;
-    }
-  }
+async function loadWorkPermits() {
+  const list = document.getElementById("permitsList");
+  if (list) list.innerHTML = "<div class='loading'>جاري التحميل...</div>";
 
-  async function resolvePath(candidates) {
-    const schema = await loadOpenApi();
-    const paths = new Set(Object.keys(schema.paths || {}));
-    return candidates.find((c) => paths.has(c)) || candidates[0];
-  }
-
-  async function checkSystem() {
-    try {
-      const path = await resolvePath(['/core/system/status', '/system/status']);
-      const data = await request(path);
-      el.kpiSystem.textContent = data.healthy || data.status === 'ok' ? 'Online' : 'Degraded';
-    } catch (error) {
-      el.kpiSystem.textContent = 'Offline';
-      notify(`System check failed: ${error.message}`, true);
-    }
-  }
-
-  function renderRiskChart(reports = []) {
-    const ctx = document.getElementById('risk-chart');
-    if (!ctx) return;
-
-    const labels = reports.length ? reports.map((r) => r.label || r.month || '-') : ['Jan', 'Feb', 'Mar'];
-    const values = reports.length ? reports.map((r) => r.value || r.score || 0) : [45, 55, 62];
-
-    if (state.chart) state.chart.destroy();
-
-    state.chart = new Chart(ctx, {
-      type: 'line',
-      data: {
-        labels,
-        datasets: [
-          {
-            label: 'Risk Score',
-            data: values,
-            borderColor: '#4d7bff',
-            backgroundColor: 'rgba(77,123,255,0.18)',
-            fill: true,
-            tension: 0.32,
-          },
-        ],
-      },
-      options: { responsive: true, plugins: { legend: { labels: { color: '#e6edff' } } } },
-    });
-  }
-
-  async function loadDashboard() {
-    try {
-      const path = await resolvePath(['/dashboard']);
-      const data = await request(path);
-      el.kpiRisk.textContent = data.risk_score ?? data.totals?.risk_score ?? 0;
-      el.kpiPermits.textContent = data.active_permits ?? 0;
-      el.kpiAlerts.textContent = data.smart_alerts ?? data.totals?.detections ?? 0;
-      renderRiskChart(data.reports || []);
-    } catch (error) {
-      notify(`Dashboard failed: ${error.message}`, true);
-    }
-  }
-
-  async function loadPermits() {
-    try {
-      const path = await resolvePath(['/core/work-permits']);
-      const permits = await request(path);
-      el.permitsList.innerHTML = permits
-        .map(
-          (p) => `<div class="permit-item"><strong>${p.title}</strong><br/>${p.risk_level} | ${p.status}<br/>Approved by: ${p.approved_by}</div>`
-        )
-        .join('');
-    } catch (error) {
-      notify(`Permits failed: ${error.message}`, true);
-    }
-  }
-
-  async function submitRisk(event) {
-    event.preventDefault();
-    const fd = new FormData(el.riskForm);
-    const payload = {
-      location: fd.get('location'),
-      historical_incidents: Number(fd.get('historical_incidents') || 0),
-      environmental_factors: String(fd.get('environmental_factors') || '')
-        .split(',')
-        .map((x) => x.trim())
-        .filter(Boolean),
-    };
-
-    try {
-      const path = await resolvePath(['/core/predict-risk']);
-      const data = await request(path, { method: 'POST', body: payload });
-      el.riskResult.textContent = JSON.stringify(data, null, 2);
-      notify('Risk prediction completed');
-    } catch (error) {
-      el.riskResult.textContent = error.message;
-      notify(`Risk prediction failed: ${error.message}`, true);
-    }
-  }
-
-  async function submitBehavior(event) {
-    event.preventDefault();
-    const fd = new FormData(el.behaviorForm);
-
-    let events = [];
-    try {
-      events = JSON.parse(String(fd.get('events') || '[]'));
-    } catch {
-      notify('Invalid events JSON', true);
+  try {
+    const permits = await apiFetch("/core/work-permits");
+    if (!permits.length) {
+      if (list) list.innerHTML = "<div class='loading'>لا توجد تصاريح</div>";
       return;
     }
 
-    try {
-      const path = await resolvePath(['/core/behavior-analysis']);
-      const data = await request(path, {
-        method: 'POST',
-        body: {
-          location: fd.get('location'),
-          events,
-        },
-      });
-      el.behaviorResult.textContent = JSON.stringify(data, null, 2);
-      notify('Behavior analysis completed');
-    } catch (error) {
-      el.behaviorResult.textContent = error.message;
-      notify(`Behavior analysis failed: ${error.message}`, true);
+    if (list) {
+      list.innerHTML = permits
+        .map(
+          (p) => `
+      <div class="card">
+        <div class="card-body">
+          <h4>${p.title}</h4>
+          <p>Risk: ${p.risk_level} | Status: ${p.status}</p>
+          <small>${p.updated_at || ""}</small>
+          <div style="margin-top:.75rem; display:flex; gap:.5rem; flex-wrap:wrap;">
+            <button class="btn" onclick="activatePermit('${p.id}')">تفعيل</button>
+            <button class="btn" onclick="closePermit('${p.id}')">إغلاق</button>
+            <button class="btn" onclick="deletePermit('${p.id}')">حذف</button>
+          </div>
+        </div>
+      </div>
+    `
+        )
+        .join("");
     }
+  } catch (e) {
+    if (list) list.innerHTML = `<div class="error">خطأ: ${e.message}</div>`;
   }
+}
 
-  async function submitPermit(event) {
-    event.preventDefault();
-    const fd = new FormData(el.permitForm);
-    const payload = {
-      title: fd.get('title'),
-      risk_level: fd.get('risk_level'),
-      approved_by: fd.get('approved_by'),
-      status: fd.get('status'),
-      checklist_items: String(fd.get('checklist_items') || '')
-        .split(',')
-        .map((x) => x.trim())
-        .filter(Boolean),
-    };
+async function createPermit() {
+  const title = document.getElementById("permitTitle")?.value.trim() || "";
+  const risk_level = document.getElementById("permitRisk")?.value || "Medium";
+  const approved_by = document.getElementById("permitApprover")?.value.trim() || null;
+  const itemsRaw = document.getElementById("permitChecklist")?.value.trim() || "";
+  const checklist_items = itemsRaw ? itemsRaw.split("\n").map((x) => x.trim()).filter(Boolean) : [];
 
-    try {
-      const path = await resolvePath(['/core/work-permits']);
-      await request(path, { method: 'POST', body: payload });
-      el.permitForm.reset();
-      await loadPermits();
-      await loadDashboard();
-      notify('Permit created successfully');
-    } catch (error) {
-      notify(`Create permit failed: ${error.message}`, true);
-    }
-  }
-
-  function setupTabs() {
-    el.tabs.forEach((tab) => {
-      tab.addEventListener('click', () => {
-        el.tabs.forEach((t) => t.classList.remove('active'));
-        tab.classList.add('active');
-        const target = tab.dataset.tab;
-        el.panels.forEach((p) => p.classList.toggle('active', p.id === target));
-      });
+  try {
+    await apiFetch("/core/work-permits", {
+      method: "POST",
+      body: JSON.stringify({ title, risk_level, approved_by, status: "draft", checklist_items }),
     });
+
+    document.getElementById("permitTitle").value = "";
+    document.getElementById("permitApprover").value = "";
+    document.getElementById("permitChecklist").value = "";
+
+    await loadWorkPermits();
+    await loadDashboardAdvanced();
+  } catch (e) {
+    alert(`خطأ: ${e.message}`);
   }
+}
 
-  async function init() {
-    setupTabs();
-    el.riskForm.addEventListener('submit', submitRisk);
-    el.behaviorForm.addEventListener('submit', submitBehavior);
-    el.permitForm.addEventListener('submit', submitPermit);
+async function activatePermit(id) {
+  await apiFetch(`/core/work-permits/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ status: "active" }),
+  });
+  await loadWorkPermits();
+  await loadDashboardAdvanced();
+}
 
-    await Promise.all([checkSystem(), loadDashboard(), loadPermits()]);
+async function closePermit(id) {
+  await apiFetch(`/core/work-permits/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ status: "closed" }),
+  });
+  await loadWorkPermits();
+  await loadDashboardAdvanced();
+}
+
+async function deletePermit(id) {
+  await apiFetch(`/core/work-permits/${id}`, { method: "DELETE" });
+  await loadWorkPermits();
+  await loadDashboardAdvanced();
+}
+
+async function runBehaviorAnalysis() {
+  const location = document.getElementById("behaviorLocation")?.value.trim() || "";
+  const raw = document.getElementById("behaviorEvents")?.value.trim() || "";
+
+  const events = raw
+    ? raw
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const [type, sev] = line.split("|").map((x) => x.trim());
+          return { type, severity: parseInt(sev || "1", 10), meta: {} };
+        })
+    : [];
+
+  const out = document.getElementById("behaviorResult");
+  if (out) out.innerHTML = "جاري التحليل...";
+
+  try {
+    const data = await apiFetch("/core/behavior-analysis", {
+      method: "POST",
+      body: JSON.stringify({ location, events }),
+    });
+
+    if (out) {
+      out.innerHTML = `
+        <div class="${data.flagged ? "error" : "success"}">
+          <h4>${data.flagged ? "⚠️ تم رصد سلوك خطر" : "✅ الوضع آمن"}</h4>
+          <p>Score: ${data.score}</p>
+          <ul>${(data.alerts || []).map((a) => `<li>${a}</li>`).join("")}</ul>
+          <hr/>
+          <ul>${(data.suggestions || []).map((s) => `<li>${s}</li>`).join("")}</ul>
+        </div>
+      `;
+    }
+  } catch (e) {
+    if (out) out.innerHTML = `<div class="error">خطأ: ${e.message}</div>`;
   }
+}
 
-  init();
-})();
+function loadPageData(pageName) {
+  switch (pageName) {
+    case "dashboard":
+      loadDashboardAdvanced();
+      break;
+    case "riskAnalysis":
+      break;
+    case "workPermits":
+      loadWorkPermits();
+      break;
+    case "behavior":
+      break;
+    default:
+      break;
+  }
+}
+
+function bindNavigation() {
+  document.querySelectorAll(".nav-item").forEach((item) => {
+    item.addEventListener("click", (e) => {
+      e.preventDefault();
+      const page = item.dataset.page;
+      showPage(page);
+    });
+  });
+}
+
+function init() {
+  bindNavigation();
+  showPage("dashboard");
+}
+
+window.runRiskPrediction = runRiskPrediction;
+window.loadWorkPermits = loadWorkPermits;
+window.createPermit = createPermit;
+window.activatePermit = activatePermit;
+window.closePermit = closePermit;
+window.deletePermit = deletePermit;
+window.runBehaviorAnalysis = runBehaviorAnalysis;
+
+init();
