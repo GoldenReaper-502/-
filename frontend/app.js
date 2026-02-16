@@ -1,449 +1,235 @@
 (() => {
-  'use strict';
-
-  const DEFAULT_DEV_API = 'http://127.0.0.1:8000/api';
-
-  function computeApiBaseUrl() {
-    if (window.__APP_CONFIG__?.API_BASE_URL) return window.__APP_CONFIG__.API_BASE_URL;
-
-    const saved = localStorage.getItem('hazm_api_base_url');
-    if (saved) return saved;
-
-    const { protocol, hostname, port } = window.location;
-    const isLocal4173 = (hostname === '127.0.0.1' || hostname === 'localhost') && port === '4173';
-
-    if (isLocal4173) return DEFAULT_DEV_API;
-
-    return '/api';
-  }
-
-  const CONFIG = {
-    API_BASE_URL: computeApiBaseUrl(),
-    REQUEST_TIMEOUT_MS: 15000,
-  };
+  const API_BASE_URL =
+    (window.location.port === '4173' && (window.location.hostname === '127.0.0.1' || window.location.hostname === 'localhost'))
+      ? 'http://127.0.0.1:8000/api'
+      : '/api';
 
   const state = {
-    openApiLoaded: false,
-    openApiPaths: new Set(),
-    lastErrors: [],
+    chart: null,
+    openapi: null,
   };
 
-  const ENDPOINTS = {
-    platformInfo: ['/platform/info'],
-    systemStatus: ['/core/system/status', '/system/status', '/platform/info'],
-    detect: ['/core/detect', '/detect'],
-    chat: ['/core/chat', '/chat'],
-    incidentCreate: ['/core/incident', '/incident'],
-    nearMissCreate: ['/core/near-miss', '/near-miss'],
-    dashboard: ['/dashboard', '/core/dashboard'],
-    incidentList: ['/core/incident', '/incidents', '/incident'],
-    reports: ['/dashboard/reports', '/reports'],
+  const el = {
+    tabs: document.querySelectorAll('.tab'),
+    panels: document.querySelectorAll('.panel'),
+    kpiRisk: document.getElementById('kpi-risk'),
+    kpiPermits: document.getElementById('kpi-permits'),
+    kpiAlerts: document.getElementById('kpi-alerts'),
+    kpiSystem: document.getElementById('kpi-system'),
+    riskForm: document.getElementById('risk-form'),
+    riskResult: document.getElementById('risk-result'),
+    behaviorForm: document.getElementById('behavior-form'),
+    behaviorResult: document.getElementById('behavior-result'),
+    permitForm: document.getElementById('permit-form'),
+    permitsList: document.getElementById('permits-list'),
+    toast: document.getElementById('toast'),
   };
 
-  const ui = {
-    networkState: document.getElementById('network-state'),
-    overallState: document.getElementById('overall-state'),
-    summary: document.getElementById('summary-text'),
-    backendStatus: document.getElementById('backend-status'),
-    backendLatency: document.getElementById('backend-latency'),
-    backendMessage: document.getElementById('backend-message'),
-    frontendStatus: document.getElementById('frontend-status'),
-    frontendLatency: document.getElementById('frontend-latency'),
-    frontendMessage: document.getElementById('frontend-message'),
-    historyBody: document.getElementById('history-body'),
-    historyCount: document.getElementById('history-count'),
-    runCheckButton: document.getElementById('run-check'),
-  };
-
-  function setText(el, value) {
-    if (!el) return;
-    el.textContent = value;
+  function notify(message, isError = false) {
+    el.toast.textContent = message;
+    el.toast.style.background = isError ? '#6b2332' : '#1e2e57';
+    el.toast.classList.add('show');
+    setTimeout(() => el.toast.classList.remove('show'), 2400);
   }
 
-  function setStatusBadge(el, statusText, className) {
-    if (!el) return;
-    el.classList.remove('pending', 'success', 'fail');
-    if (className) el.classList.add(className);
-    el.textContent = statusText;
-  }
-
-  function rememberError(message) {
-    state.lastErrors.unshift({ message, at: new Date().toISOString() });
-    state.lastErrors = state.lastErrors.slice(0, 20);
-    console.warn('[API]', message);
-  }
-
-  function normalizeBaseUrl(url) {
-    return url.replace(/\/+$/, '');
-  }
-
-  function buildUrl(path) {
-    const base = normalizeBaseUrl(CONFIG.API_BASE_URL);
-    const cleanPath = path.startsWith('/') ? path : `/${path}`;
-    return `${base}${cleanPath}`;
-  }
-
-  function withTimeout(promise, timeoutMs = CONFIG.REQUEST_TIMEOUT_MS) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-    return {
-      signal: controller.signal,
-      wait: promise(controller.signal)
-        .finally(() => clearTimeout(timeout)),
-    };
-  }
-
-  async function apiRequest(path, options = {}) {
-    const url = buildUrl(path);
-    const startedAt = performance.now();
-
-    const { signal, wait } = withTimeout(async (timeoutSignal) => {
-      const response = await fetch(url, {
-        method: options.method || 'GET',
-        headers: {
-          'Content-Type': options.body instanceof FormData ? undefined : 'application/json',
-          ...(options.headers || {}),
-        },
-        body:
-          options.body == null
-            ? undefined
-            : options.body instanceof FormData
-              ? options.body
-              : JSON.stringify(options.body),
-        signal: timeoutSignal,
-      });
-
-      const latencyMs = Math.round(performance.now() - startedAt);
-      const text = await response.text();
-      let parsed;
-      try {
-        parsed = text ? JSON.parse(text) : {};
-      } catch {
-        parsed = { raw: text };
-      }
-
-      if (!response.ok) {
-        const message = parsed?.detail || parsed?.message || `HTTP ${response.status}`;
-        const error = new Error(message);
-        error.status = response.status;
-        error.response = parsed;
-        throw error;
-      }
-
-      return { data: parsed, latencyMs };
+  async function request(path, options = {}) {
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      method: options.method || 'GET',
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+      body: options.body ? JSON.stringify(options.body) : undefined,
     });
 
+    let json = {};
     try {
-      return await wait;
-    } catch (error) {
-      if (signal.aborted) {
-        error.message = `Request timeout after ${CONFIG.REQUEST_TIMEOUT_MS}ms (${path})`;
-      }
-      throw error;
+      json = await res.json();
+    } catch (_) {}
+
+    if (!res.ok) {
+      throw new Error(json.detail || `HTTP ${res.status}`);
     }
+    return json;
   }
 
-  async function loadOpenAPI() {
-    if (state.openApiLoaded) return;
-
+  async function loadOpenApi() {
+    if (state.openapi) return state.openapi;
     try {
-      const { data } = await apiRequest('/openapi.json');
-      const paths = Object.keys(data?.paths || {});
-      state.openApiPaths = new Set(paths);
-      state.openApiLoaded = true;
-    } catch (error) {
-      rememberError(`Unable to load OpenAPI schema: ${error.message}`);
-      state.openApiLoaded = true;
+      state.openapi = await request('/openapi.json');
+      return state.openapi;
+    } catch {
+      state.openapi = { paths: {} };
+      return state.openapi;
     }
   }
 
-  function endpointExists(path) {
-    if (!state.openApiPaths.size) return false;
-    return state.openApiPaths.has(path);
+  async function resolvePath(candidates) {
+    const schema = await loadOpenApi();
+    const paths = new Set(Object.keys(schema.paths || {}));
+    return candidates.find((c) => paths.has(c)) || candidates[0];
   }
 
-  function resolveEndpoint(candidates = []) {
-    const existing = candidates.find((path) => endpointExists(path));
-    return existing || candidates[0];
-  }
-
-  function pickFirst(...values) {
-    for (const value of values) {
-      if (value !== undefined && value !== null) return value;
-    }
-    return null;
-  }
-
-  function asArray(value) {
-    if (Array.isArray(value)) return value;
-    if (Array.isArray(value?.items)) return value.items;
-    if (Array.isArray(value?.results)) return value.results;
-    if (Array.isArray(value?.incidents)) return value.incidents;
-    if (Array.isArray(value?.data)) return value.data;
-    return [];
-  }
-
-  function toFriendlyError(error, fallback) {
-    return error?.message || error?.detail || fallback;
-  }
-
-  async function checkSystemStatus() {
-    await loadOpenAPI();
-    const endpoint = resolveEndpoint(ENDPOINTS.systemStatus);
+  async function checkSystem() {
     try {
-      const { data, latencyMs } = await apiRequest(endpoint);
-      const healthy = pickFirst(data?.healthy, data?.status === 'ok', data?.ok, true);
-      const message = pickFirst(data?.message, data?.detail, 'System status loaded.');
-
-      return {
-        ok: Boolean(healthy),
-        latencyMs,
-        message,
-        raw: data,
-      };
+      const path = await resolvePath(['/core/system/status', '/system/status']);
+      const data = await request(path);
+      el.kpiSystem.textContent = data.healthy || data.status === 'ok' ? 'Online' : 'Degraded';
     } catch (error) {
-      const fallbackMessage = `Failed to check system status (${endpoint})`;
-      return {
-        ok: false,
-        latencyMs: null,
-        message: toFriendlyError(error, fallbackMessage),
-        raw: null,
-      };
+      el.kpiSystem.textContent = 'Offline';
+      notify(`System check failed: ${error.message}`, true);
     }
   }
 
-  async function detectObjects(payload) {
-    await loadOpenAPI();
-    const endpoint = resolveEndpoint(ENDPOINTS.detect);
+  function renderRiskChart(reports = []) {
+    const ctx = document.getElementById('risk-chart');
+    if (!ctx) return;
 
-    try {
-      const { data, latencyMs } = await apiRequest(endpoint, {
-        method: 'POST',
-        body: payload,
-      });
+    const labels = reports.length ? reports.map((r) => r.label || r.month || '-') : ['Jan', 'Feb', 'Mar'];
+    const values = reports.length ? reports.map((r) => r.value || r.score || 0) : [45, 55, 62];
 
-      return {
-        ok: true,
-        latencyMs,
-        detections: asArray(data?.detections || data),
-        raw: data,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        latencyMs: null,
-        detections: [],
-        error: toFriendlyError(error, `Detection request failed (${endpoint})`),
-      };
-    }
-  }
+    if (state.chart) state.chart.destroy();
 
-  async function sendChat(payload) {
-    await loadOpenAPI();
-    const endpoint = resolveEndpoint(ENDPOINTS.chat);
-
-    try {
-      const { data, latencyMs } = await apiRequest(endpoint, {
-        method: 'POST',
-        body: payload,
-      });
-
-      return {
-        ok: true,
-        latencyMs,
-        reply: pickFirst(data?.reply, data?.response, data?.message, ''),
-        raw: data,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        latencyMs: null,
-        reply: '',
-        error: toFriendlyError(error, `Chat request failed (${endpoint})`),
-      };
-    }
-  }
-
-  async function createIncident(payload) {
-    await loadOpenAPI();
-    const endpoint = resolveEndpoint(ENDPOINTS.incidentCreate);
-
-    try {
-      const { data, latencyMs } = await apiRequest(endpoint, {
-        method: 'POST',
-        body: payload,
-      });
-      return { ok: true, latencyMs, data };
-    } catch (error) {
-      return { ok: false, latencyMs: null, error: toFriendlyError(error, `Incident create failed (${endpoint})`) };
-    }
-  }
-
-  async function createNearMiss(payload) {
-    await loadOpenAPI();
-    const endpoint = resolveEndpoint(ENDPOINTS.nearMissCreate);
-
-    try {
-      const { data, latencyMs } = await apiRequest(endpoint, {
-        method: 'POST',
-        body: payload,
-      });
-      return { ok: true, latencyMs, data };
-    } catch (error) {
-      return { ok: false, latencyMs: null, error: toFriendlyError(error, `Near-miss create failed (${endpoint})`) };
-    }
+    state.chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          {
+            label: 'Risk Score',
+            data: values,
+            borderColor: '#4d7bff',
+            backgroundColor: 'rgba(77,123,255,0.18)',
+            fill: true,
+            tension: 0.32,
+          },
+        ],
+      },
+      options: { responsive: true, plugins: { legend: { labels: { color: '#e6edff' } } } },
+    });
   }
 
   async function loadDashboard() {
-    await loadOpenAPI();
-    const endpoint = resolveEndpoint(ENDPOINTS.dashboard);
+    try {
+      const path = await resolvePath(['/dashboard']);
+      const data = await request(path);
+      el.kpiRisk.textContent = data.risk_score ?? data.totals?.risk_score ?? 0;
+      el.kpiPermits.textContent = data.active_permits ?? 0;
+      el.kpiAlerts.textContent = data.smart_alerts ?? data.totals?.detections ?? 0;
+      renderRiskChart(data.reports || []);
+    } catch (error) {
+      notify(`Dashboard failed: ${error.message}`, true);
+    }
+  }
+
+  async function loadPermits() {
+    try {
+      const path = await resolvePath(['/core/work-permits']);
+      const permits = await request(path);
+      el.permitsList.innerHTML = permits
+        .map(
+          (p) => `<div class="permit-item"><strong>${p.title}</strong><br/>${p.risk_level} | ${p.status}<br/>Approved by: ${p.approved_by}</div>`
+        )
+        .join('');
+    } catch (error) {
+      notify(`Permits failed: ${error.message}`, true);
+    }
+  }
+
+  async function submitRisk(event) {
+    event.preventDefault();
+    const fd = new FormData(el.riskForm);
+    const payload = {
+      location: fd.get('location'),
+      historical_incidents: Number(fd.get('historical_incidents') || 0),
+      environmental_factors: String(fd.get('environmental_factors') || '')
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean),
+    };
 
     try {
-      const { data } = await apiRequest(endpoint);
+      const path = await resolvePath(['/core/predict-risk']);
+      const data = await request(path, { method: 'POST', body: payload });
+      el.riskResult.textContent = JSON.stringify(data, null, 2);
+      notify('Risk prediction completed');
+    } catch (error) {
+      el.riskResult.textContent = error.message;
+      notify(`Risk prediction failed: ${error.message}`, true);
+    }
+  }
 
-      return {
-        ok: true,
-        totals: {
-          incidents: pickFirst(data?.totals?.incidents, data?.incidents_count, asArray(data?.incidents).length, 0),
-          nearMisses: pickFirst(data?.totals?.near_misses, data?.near_miss_count, asArray(data?.near_misses).length, 0),
-          detections: pickFirst(data?.totals?.detections, data?.detections_count, asArray(data?.detections).length, 0),
+  async function submitBehavior(event) {
+    event.preventDefault();
+    const fd = new FormData(el.behaviorForm);
+
+    let events = [];
+    try {
+      events = JSON.parse(String(fd.get('events') || '[]'));
+    } catch {
+      notify('Invalid events JSON', true);
+      return;
+    }
+
+    try {
+      const path = await resolvePath(['/core/behavior-analysis']);
+      const data = await request(path, {
+        method: 'POST',
+        body: {
+          location: fd.get('location'),
+          events,
         },
-        incidents: asArray(data?.incidents),
-        reports: asArray(data?.reports),
-        raw: data,
-      };
+      });
+      el.behaviorResult.textContent = JSON.stringify(data, null, 2);
+      notify('Behavior analysis completed');
     } catch (error) {
-      const fallback = await Promise.allSettled([loadIncidents(), loadReports()]);
-      const incidentsResult = fallback[0].status === 'fulfilled' ? fallback[0].value : { incidents: [] };
-      const reportsResult = fallback[1].status === 'fulfilled' ? fallback[1].value : { reports: [] };
-
-      return {
-        ok: false,
-        incidents: incidentsResult.incidents || [],
-        reports: reportsResult.reports || [],
-        totals: {
-          incidents: (incidentsResult.incidents || []).length,
-          nearMisses: 0,
-          detections: 0,
-        },
-        error: toFriendlyError(error, `Dashboard endpoint unavailable (${endpoint})`),
-      };
+      el.behaviorResult.textContent = error.message;
+      notify(`Behavior analysis failed: ${error.message}`, true);
     }
   }
 
-  async function loadIncidents() {
-    await loadOpenAPI();
-    const endpoint = resolveEndpoint(ENDPOINTS.incidentList);
+  async function submitPermit(event) {
+    event.preventDefault();
+    const fd = new FormData(el.permitForm);
+    const payload = {
+      title: fd.get('title'),
+      risk_level: fd.get('risk_level'),
+      approved_by: fd.get('approved_by'),
+      status: fd.get('status'),
+      checklist_items: String(fd.get('checklist_items') || '')
+        .split(',')
+        .map((x) => x.trim())
+        .filter(Boolean),
+    };
 
     try {
-      const { data } = await apiRequest(endpoint);
-      return {
-        ok: true,
-        incidents: asArray(data?.incidents || data),
-        raw: data,
-      };
+      const path = await resolvePath(['/core/work-permits']);
+      await request(path, { method: 'POST', body: payload });
+      el.permitForm.reset();
+      await loadPermits();
+      await loadDashboard();
+      notify('Permit created successfully');
     } catch (error) {
-      return {
-        ok: false,
-        incidents: [],
-        error: toFriendlyError(error, `Incidents load failed (${endpoint})`),
-      };
+      notify(`Create permit failed: ${error.message}`, true);
     }
   }
 
-  async function loadReports() {
-    await loadOpenAPI();
-    const endpoint = resolveEndpoint(ENDPOINTS.reports);
-
-    try {
-      const { data } = await apiRequest(endpoint);
-      return {
-        ok: true,
-        reports: asArray(data?.reports || data),
-        raw: data,
-      };
-    } catch (error) {
-      return {
-        ok: false,
-        reports: [],
-        error: toFriendlyError(error, `Reports load failed (${endpoint})`),
-      };
-    }
-  }
-
-  function addHistoryRow(service, ok, latencyMs, message) {
-    if (!ui.historyBody) return;
-    const row = document.createElement('tr');
-    row.innerHTML = `
-      <td>${new Date().toLocaleTimeString()}</td>
-      <td>${service}</td>
-      <td>${ok ? 'جاهز' : 'متعثر'}</td>
-      <td>${latencyMs == null ? '—' : `${latencyMs} ms`}</td>
-      <td>${message}</td>
-    `;
-    ui.historyBody.prepend(row);
-
-    if (ui.historyCount) {
-      const rows = ui.historyBody.querySelectorAll('tr').length;
-      ui.historyCount.textContent = `${rows} نتائج`;
-    }
-  }
-
-  async function runConnectivityCheck() {
-    setText(ui.networkState, navigator.onLine ? 'متصل' : 'غير متصل');
-
-    const result = await checkSystemStatus();
-    const backendOk = result.ok;
-
-    setStatusBadge(ui.backendStatus, backendOk ? 'جاهز' : 'متعثر', backendOk ? 'success' : 'fail');
-    setText(ui.backendLatency, result.latencyMs == null ? '—' : `${result.latencyMs} ms`);
-    setText(ui.backendMessage, result.message);
-
-    setStatusBadge(ui.frontendStatus, 'جاهز', 'success');
-    setText(ui.frontendLatency, '0 ms');
-    setText(ui.frontendMessage, 'Frontend loaded successfully.');
-
-    if (backendOk) {
-      setText(ui.overallState, 'مستقر');
-      setText(ui.summary, 'الاتصال بالباك اند ناجح ✅');
-    } else {
-      setText(ui.overallState, 'متوسط');
-      setText(ui.summary, `تعذر الاتصال ببعض الخدمات: ${result.message}`);
-    }
-
-    addHistoryRow('Backend', backendOk, result.latencyMs, result.message);
+  function setupTabs() {
+    el.tabs.forEach((tab) => {
+      tab.addEventListener('click', () => {
+        el.tabs.forEach((t) => t.classList.remove('active'));
+        tab.classList.add('active');
+        const target = tab.dataset.tab;
+        el.panels.forEach((p) => p.classList.toggle('active', p.id === target));
+      });
+    });
   }
 
   async function init() {
-    await loadOpenAPI();
-    await runConnectivityCheck();
+    setupTabs();
+    el.riskForm.addEventListener('submit', submitRisk);
+    el.behaviorForm.addEventListener('submit', submitBehavior);
+    el.permitForm.addEventListener('submit', submitPermit);
 
-    ui.runCheckButton?.addEventListener('click', runConnectivityCheck);
-
-    window.addEventListener('online', runConnectivityCheck);
-    window.addEventListener('offline', runConnectivityCheck);
+    await Promise.all([checkSystem(), loadDashboard(), loadPermits()]);
   }
-
-  window.AppAPI = {
-    CONFIG,
-    checkSystemStatus,
-    detectObjects,
-    sendChat,
-    createIncident,
-    createNearMiss,
-    loadDashboard,
-    loadIncidents,
-    loadReports,
-    setApiBaseUrl(url) {
-      CONFIG.API_BASE_URL = normalizeBaseUrl(url);
-      localStorage.setItem('hazm_api_base_url', CONFIG.API_BASE_URL);
-      return CONFIG.API_BASE_URL;
-    },
-    getErrors() {
-      return [...state.lastErrors];
-    },
-  };
 
   init();
 })();
