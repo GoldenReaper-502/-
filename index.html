@@ -1,0 +1,159 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HAZM TUWAIQ — AI Safety Platform</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <h2>HAZM TUWAIQ</h2>
+        <p class="muted" id="whoami">غير مسجل</p>
+        <a class="nav-item active" data-page="dashboard" href="#">لوحة التحكم</a>
+        <a class="nav-item" data-page="cameras" href="#">الكاميرات</a>
+        <a class="nav-item" data-page="detection" href="#">الكشف والقراءة</a>
+        <a class="nav-item" data-page="assistant" href="#">المساعد الذكي</a>
+        <a class="nav-item" data-page="incidents" href="#">الحوادث</a>
+        <a class="nav-item" data-page="risk" href="#">تحليل المخاطر</a>
+        <a class="nav-item" data-page="inspections" href="#">التفتيش</a>
+        <a class="nav-item" data-page="reports" href="#">التقارير</a>
+        <a class="nav-item" data-page="permits" href="#">تصاريح العمل</a>
+        <a class="nav-item" data-page="behavior" href="#">التحليل السلوكي</a>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <h1>منصة السلامة المهنية المدعومة بالذكاء الاصطناعي</h1>
+          <div class="auth-row">
+            <input id="login-username" placeholder="username" value="superadmin" />
+            <input id="login-password" type="password" placeholder="password" value="admin123" />
+            <button id="login-btn" class="btn">دخول</button>
+            <button id="seed-btn" class="btn secondary">Seed</button>
+          </div>
+        </header>
+
+        <section id="dashboardPage" class="page active">
+          <div class="stats-grid">
+            <div class="stat-card"><h4>Global Risk Score</h4><div id="kpi-risk">0</div></div>
+            <div class="stat-card"><h4>Incidents Open</h4><div id="kpi-open">0</div></div>
+            <div class="stat-card"><h4>Permits Active</h4><div id="kpi-permits">0</div></div>
+            <div class="stat-card"><h4>Smart Alerts</h4><div id="kpi-alerts">0</div></div>
+          </div>
+          <div class="card"><canvas id="dashboardChart" height="110"></canvas></div>
+        </section>
+
+        <section id="camerasPage" class="page">
+          <h3>الكاميرات</h3>
+          <div class="card card-body">
+            <input id="cam-name" placeholder="name" />
+            <input id="cam-site" placeholder="site_id" />
+            <input id="cam-url" placeholder="stream_url rtsp://..." />
+            <input id="cam-vendor" placeholder="vendor" />
+            <input id="cam-location" placeholder="location" />
+            <button class="btn" onclick="createCamera()">إضافة كاميرا</button>
+          </div>
+          <div id="camera-list"></div>
+        </section>
+
+        <section id="detectionPage" class="page">
+          <h3>الكشف والقراءة</h3>
+          <div class="card card-body">
+            <input id="detect-source" placeholder="source" value="camera" />
+            <textarea id="detect-payload" placeholder='{"frame":"mock"}'></textarea>
+            <button class="btn" onclick="runDetection()">تشغيل الكشف</button>
+            <pre id="detect-result" class="result"></pre>
+          </div>
+        </section>
+
+        <section id="assistantPage" class="page">
+          <h3>المساعد الذكي</h3>
+          <div class="card card-body">
+            <textarea id="assistant-query" placeholder="اسأل المساعد..."></textarea>
+            <button class="btn" onclick="askAssistant()">إرسال</button>
+            <pre id="assistant-result" class="result"></pre>
+          </div>
+        </section>
+
+        <section id="incidentsPage" class="page">
+          <h3>الحوادث</h3>
+          <div class="card card-body">
+            <input id="inc-type" placeholder="type" />
+            <input id="inc-severity" placeholder="severity" value="Medium" />
+            <input id="inc-site" placeholder="site_id" />
+            <input id="inc-camera" placeholder="camera_id (optional)" />
+            <textarea id="inc-desc" placeholder="description"></textarea>
+            <button class="btn" onclick="createIncident()">إنشاء حادث</button>
+          </div>
+          <div id="incident-list"></div>
+        </section>
+
+        <section id="riskPage" class="page">
+          <h3>تحليل المخاطر</h3>
+          <div class="card card-body">
+            <input id="risk-location" placeholder="location" />
+            <input id="risk-historical" type="number" value="0" placeholder="historical_incidents" />
+            <textarea id="risk-factors" placeholder="factor per line"></textarea>
+            <button class="btn" onclick="predictRisk()">Predict Risk</button>
+            <pre id="risk-result" class="result"></pre>
+          </div>
+          <div class="card card-body">
+            <input id="ra-hazard" placeholder="hazard" />
+            <input id="ra-likelihood" type="number" value="1" />
+            <input id="ra-severity" type="number" value="1" />
+            <input id="ra-controls" placeholder="controls comma-separated" />
+            <input id="ra-residual" type="number" value="1" />
+            <button class="btn" onclick="createRiskAssessment()">Add Assessment</button>
+          </div>
+        </section>
+
+        <section id="inspectionsPage" class="page">
+          <h3>التفتيش</h3>
+          <div class="card card-body">
+            <input id="insp-score" type="number" value="80" />
+            <textarea id="insp-findings" placeholder="finding per line"></textarea>
+            <button class="btn" onclick="createInspection()">إنشاء تفتيش</button>
+          </div>
+          <div id="inspection-list"></div>
+        </section>
+
+        <section id="reportsPage" class="page">
+          <h3>التقارير</h3>
+          <div class="card card-body">
+            <a class="btn" href="http://127.0.0.1:8000/api/reports/incidents.csv" target="_blank">Incidents CSV</a>
+            <a class="btn" href="http://127.0.0.1:8000/api/reports/permits.csv" target="_blank">Permits CSV</a>
+            <a class="btn" href="http://127.0.0.1:8000/api/reports/risk.csv" target="_blank">Risk CSV</a>
+            <p class="muted">PDF TODO</p>
+          </div>
+        </section>
+
+        <section id="permitsPage" class="page">
+          <h3>تصاريح العمل</h3>
+          <div class="card card-body">
+            <input id="permit-title" placeholder="title" />
+            <input id="permit-site" placeholder="site_id" />
+            <input id="permit-risk" placeholder="risk_level" value="Medium" />
+            <input id="permit-approver" placeholder="approver" />
+            <textarea id="permit-items" placeholder="checklist item per line"></textarea>
+            <button class="btn" onclick="createPermit()">Create Permit</button>
+          </div>
+          <div id="permit-list"></div>
+        </section>
+
+        <section id="behaviorPage" class="page">
+          <h3>التحليل السلوكي</h3>
+          <div class="card card-body">
+            <input id="behavior-location" placeholder="location" />
+            <textarea id="behavior-events" placeholder='[{"type":"PPE_MISSING","severity":4,"meta":{}}]'></textarea>
+            <button class="btn" onclick="runBehavior()">Analyze</button>
+            <pre id="behavior-result" class="result"></pre>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="frontend/app.js"></script>
+  </body>
+</html>
