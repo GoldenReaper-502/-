@@ -1,0 +1,36 @@
+:root {
+  --bg: #0f1628;
+  --surface: #17213a;
+  --border: rgba(255,255,255,.12);
+  --text: #eaf0ff;
+  --muted: #a5b3d8;
+  --primary: #4f7dff;
+}
+* { box-sizing: border-box; }
+body { margin:0; font-family:"Tajawal", system-ui, sans-serif; background:var(--bg); color:var(--text); }
+.layout { display:grid; grid-template-columns: 260px 1fr; min-height:100vh; }
+.sidebar { border-left:1px solid var(--border); padding:1rem; background:#121b31; }
+.sidebar h2 { margin-top:0; }
+.nav-item { display:block; color:var(--text); text-decoration:none; padding:.55rem .7rem; border:1px solid var(--border); border-radius:10px; margin-bottom:.55rem; }
+.nav-item.active { background:var(--primary); border-color:var(--primary); }
+.content { padding:1rem; }
+.topbar h1 { margin:.2rem 0; }
+.topbar p { color:var(--muted); margin:.2rem 0 1rem; }
+.page { display:none; }
+.page.active { display:block; }
+.stats-grid { display:grid; grid-template-columns: repeat(auto-fit,minmax(180px,1fr)); gap:.7rem; margin-bottom:.8rem; }
+.stat-card, .card { border:1px solid var(--border); background:var(--surface); border-radius:12px; padding:.9rem; }
+.stat-card h4 { margin:0 0 .4rem; color:var(--muted); }
+.stat-card div { font-size:1.5rem; font-weight:700; }
+.card-body { display:grid; gap:.6rem; }
+.input { width:100%; padding:.6rem; border-radius:8px; border:1px solid var(--border); background:#0f1830; color:var(--text); }
+.btn { border:0; background:var(--primary); color:#fff; border-radius:8px; padding:.55rem .85rem; cursor:pointer; }
+.result { margin-top:.6rem; border:1px solid var(--border); background:#0e1730; border-radius:8px; padding:.6rem; white-space:pre-wrap; }
+#permitsList .card { margin-top:.7rem; }
+.loading { color:var(--muted); }
+.error { color:#ff9aa8; }
+.success { color:#9cffca; }
+@media (max-width: 920px) {
+  .layout { grid-template-columns: 1fr; }
+  .sidebar { border-left:0; border-bottom:1px solid var(--border); }
+}

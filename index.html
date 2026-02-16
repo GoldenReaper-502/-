@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>حزم طويق – HAZM TUWAIQ</title>
+    <link rel="stylesheet" href="style.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+  <body>
+    <div class="layout">
+      <aside class="sidebar">
+        <h2>حزم طويق</h2>
+        <a class="nav-item active" href="#" data-page="dashboard">لوحة التحكم</a>
+        <a class="nav-item" href="#" data-page="riskAnalysis">تحليل المخاطر</a>
+        <a class="nav-item" href="#" data-page="workPermits">تصاريح العمل</a>
+        <a class="nav-item" href="#" data-page="behavior">التحليل السلوكي</a>
+      </aside>
+
+      <main class="content">
+        <header class="topbar">
+          <h1>HAZM TUWAIQ — AI Safety Platform</h1>
+          <p>منصة السلامة المهنية المدعومة بالذكاء الاصطناعي</p>
+        </header>
+
+        <div class="page active" id="dashboardPage">
+          <div class="stats-grid">
+            <div class="stat-card"><h4>Global Risk Score</h4><div id="globalRiskScore">0</div></div>
+            <div class="stat-card"><h4>Active Permits</h4><div id="activePermitsCount">0</div></div>
+            <div class="stat-card"><h4>Checklists</h4><div id="checklistsCount">0</div></div>
+            <div class="stat-card"><h4>System</h4><div id="systemHealth">--</div></div>
+          </div>
+          <div class="card"><canvas id="dashboardChart" height="120"></canvas></div>
+        </div>
+
+        <div class="page" id="riskAnalysisPage">
+          <h3>تحليل المخاطر</h3>
+          <div class="card">
+            <div class="card-body">
+              <label>الموقع</label>
+              <input id="riskLocation" class="input" placeholder="مثال: Site A" />
+              <label>عدد الحوادث السابقة</label>
+              <input id="riskHistorical" class="input" type="number" value="0" />
+              <label>عوامل بيئية (كل سطر عامل)</label>
+              <textarea id="riskFactors" class="input" rows="5" placeholder="Heat&#10;Dust&#10;Night Shift"></textarea>
+              <button class="btn" onclick="runRiskPrediction()">تشغيل التحليل</button>
+              <div id="riskResult" class="result"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="page" id="workPermitsPage">
+          <h3>تصاريح العمل</h3>
+          <div class="card">
+            <div class="card-body">
+              <h4>إنشاء تصريح</h4>
+              <input id="permitTitle" class="input" placeholder="عنوان التصريح" />
+              <select id="permitRisk" class="input">
+                <option>Low</option>
+                <option selected>Medium</option>
+                <option>High</option>
+              </select>
+              <input id="permitApprover" class="input" placeholder="Approved By (اختياري)" />
+              <textarea id="permitChecklist" class="input" rows="4" placeholder="Checklist items (كل سطر)"></textarea>
+              <button class="btn" onclick="createPermit()">حفظ</button>
+            </div>
+          </div>
+          <div id="permitsList"></div>
+        </div>
+
+        <div class="page" id="behaviorPage">
+          <h3>التحليل السلوكي</h3>
+          <div class="card">
+            <div class="card-body">
+              <input id="behaviorLocation" class="input" placeholder="Location" />
+              <label>Events (كل سطر: TYPE|SEVERITY)</label>
+              <textarea id="behaviorEvents" class="input" rows="6" placeholder="PPE_MISSING|4&#10;FALL_RISK|5"></textarea>
+              <button class="btn" onclick="runBehaviorAnalysis()">تحليل</button>
+              <div id="behaviorResult" class="result"></div>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="frontend/app.js"></script>
+  </body>
+</html>
