@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Control Center | لوحة جاهزية النظام</title>
+    <meta
+      name="description"
+      content="لوحة جاهزية Backend و Frontend مع فحص يدوي/تلقائي وسجل نتائج قابل للتصدير."
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header class="hero card">
+        <div>
+          <p class="badge" data-i18n="badge">برنامج جاهز للتشغيل</p>
+          <h1 data-i18n="title">لوحة جاهزية النظام</h1>
+          <p class="subtitle" data-i18n="subtitle">
+            متابعة حالة الـ Backend والـ Frontend مع فحص تلقائي، سجل زمني، وتصدير النتائج.
+          </p>
+        </div>
+        <div class="hero-stats">
+          <div class="kpi">
+            <span data-i18n="kpiLastCheck">آخر فحص</span>
+            <strong id="last-check">—</strong>
+          </div>
+          <div class="kpi">
+            <span data-i18n="kpiNetwork">وضع الاتصال</span>
+            <strong id="network-state">متصل</strong>
+          </div>
+          <div class="kpi">
+            <span data-i18n="kpiOverall">الحالة العامة</span>
+            <strong id="overall-state">غير محددة</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="controls card" aria-label="أزرار التحكم">
+        <div class="control-group">
+          <button class="btn primary" id="run-check" data-i18n="runCheck">تشغيل فحص الآن</button>
+          <button class="btn" id="toggle-auto" data-i18n="startAuto">تشغيل الفحص التلقائي</button>
+          <button class="btn ghost" id="clear-history" data-i18n="clearHistory">مسح السجل</button>
+        </div>
+        <div class="control-group settings">
+          <label>
+            <span data-i18n="intervalLabel">فترة التحديث (ثانية)</span>
+            <input id="interval-input" type="number" min="5" max="300" value="20" />
+          </label>
+          <label>
+            <span data-i18n="exportTypeLabel">نوع التصدير</span>
+            <select id="export-type">
+              <option value="json">JSON</option>
+              <option value="csv">CSV</option>
+            </select>
+          </label>
+          <label>
+            <span data-i18n="languageLabel">اللغة</span>
+            <select id="language-select">
+              <option value="ar">العربية</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+          <button class="btn" id="export-data" data-i18n="exportData">تصدير السجل</button>
+        </div>
+      </section>
+
+      <section class="cards" aria-label="حالة الخدمات">
+        <article class="service-card card" id="backend-card">
+          <div class="card-head">
+            <h2>Backend</h2>
+            <span class="status pending" id="backend-status">قيد الانتظار</span>
+          </div>
+          <p data-i18n="backendDesc">فحص API + Database + Auth بشكل محاكي.</p>
+          <ul class="meta">
+            <li><span data-i18n="latencyLabel">الاستجابة</span>: <strong id="backend-latency">—</strong></li>
+            <li><span data-i18n="lastMessageLabel">آخر رسالة</span>: <strong id="backend-message">لم يبدأ الفحص</strong></li>
+          </ul>
+        </article>
+
+        <article class="service-card card" id="frontend-card">
+          <div class="card-head">
+            <h2>Frontend</h2>
+            <span class="status pending" id="frontend-status">قيد الانتظار</span>
+          </div>
+          <p data-i18n="frontendDesc">فحص Rendering + Routing + Assets بشكل محاكي.</p>
+          <ul class="meta">
+            <li><span data-i18n="latencyLabel">الاستجابة</span>: <strong id="frontend-latency">—</strong></li>
+            <li><span data-i18n="lastMessageLabel">آخر رسالة</span>: <strong id="frontend-message">لم يبدأ الفحص</strong></li>
+          </ul>
+        </article>
+      </section>
+
+      <section class="summary card" aria-live="polite">
+        <h3 data-i18n="smartSummary">الملخص الذكي</h3>
+        <p id="summary-text">اضغط "تشغيل فحص الآن" لبدء التقييم.</p>
+      </section>
+
+      <section class="history card">
+        <div class="history-head">
+          <h3 data-i18n="historyTitle">سجل الفحوصات</h3>
+          <span id="history-count">0 نتائج</span>
+        </div>
+        <div class="table-wrapper">
+          <table>
+            <thead>
+              <tr>
+                <th data-i18n="thTime">الوقت</th>
+                <th data-i18n="thService">الخدمة</th>
+                <th data-i18n="thStatus">الحالة</th>
+                <th data-i18n="thLatency">الاستجابة</th>
+                <th data-i18n="thMessage">الرسالة</th>
+              </tr>
+            </thead>
+            <tbody id="history-body"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <script src="app.js"></script>
+  </body>
+</html>
